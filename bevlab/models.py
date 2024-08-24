@@ -9,6 +9,74 @@ from torch_scatter import scatter
 from bevlab.imagenet import ImageEncoder
 from bevlab.pnp import efficient_pnp
 
+
+def bilinear_interpolate_torch(im, x, y):
+    """
+    Args:
+        im: (H, W, C) [y, x]
+        x: (N)
+        y: (N)
+
+    Returns:
+
+    """
+    x0 = torch.floor(x).long()
+    x1 = x0 + 1
+
+    y0 = torch.floor(y).long()
+    y1 = y0 + 1
+
+    x0 = torch.clamp(x0, 0, im.shape[1] - 1)
+    x1 = torch.clamp(x1, 0, im.shape[1] - 1)
+    y0 = torch.clamp(y0, 0, im.shape[0] - 1)
+    y1 = torch.clamp(y1, 0, im.shape[0] - 1)
+
+    Ia = im[y0, x0]
+    Ib = im[y1, x0]
+    Ic = im[y0, x1]
+    Id = im[y1, x1]
+
+    wa = (x1.type_as(x) - x) * (y1.type_as(y) - y)
+    wb = (x1.type_as(x) - x) * (y - y0.type_as(y))
+    wc = (x - x0.type_as(x)) * (y1.type_as(y) - y)
+    wd = (x - x0.type_as(x)) * (y - y0.type_as(y))
+    ans = torch.t((torch.t(Ia) * wa)) + torch.t(torch.t(Ib) * wb) + torch.t(torch.t(Ic) * wc) + torch.t(torch.t(Id) * wd)
+    return ans
+
+
+def interpolate_from_bev_features(keypoints, coordinates, bev_features, batch_size, bev_stride):
+    """
+    Args:
+        keypoints: (N1 + N2 + ..., 4)
+        bev_features: (B, C, H, W)
+        batch_size:
+        bev_stride:
+
+    Returns:
+        point_bev_features: (N1 + N2 + ..., C)
+    """
+    voxel_size = [0.05, 0.05, 0.1]  # nuScenes
+    # point_cloud_range = np.array([0., -40., -3., 70.4, 40., 1.], dtype=np.float32)  # KITTI
+    point_cloud_range = np.array([-51.2, -51.2, -1.0, 51.2, 51.2, 3.0], dtype=np.float32)  # nuScenes
+    x_idxs = (keypoints[:, 0] - point_cloud_range[0]) / voxel_size[0]
+    y_idxs = (keypoints[:, 1] - point_cloud_range[1]) / voxel_size[1]
+
+    x_idxs = x_idxs / bev_stride
+    y_idxs = y_idxs / bev_stride
+
+    point_bev_features_list = []
+    for k in range(batch_size):
+        bs_mask = (coordinates[:, 0] == k)
+
+        cur_x_idxs = x_idxs[bs_mask]
+        cur_y_idxs = y_idxs[bs_mask]
+        cur_bev_features = bev_features[k].permute(1, 2, 0)  # (H, W, C)
+        point_bev_features = bilinear_interpolate_torch(cur_bev_features, cur_x_idxs, cur_y_idxs)
+        point_bev_features_list.append(point_bev_features)
+
+    point_bev_features = torch.cat(point_bev_features_list, dim=0)  # (N1 + N2 + ..., C)
+    return point_bev_features
+
 def create_correspondence_matrix(cam_coords, H, W, dist_thres=1, neg_margin=3):
     """
     创建一个 correspondence matrix，表示 3D 点与像素坐标系中每个点的对应关系。
@@ -154,6 +222,7 @@ class BEVTrainer(nn.Module):  # TODO rename
         # self.loss_contras_func =MultiMatchInfoNCELoss(0.07)
         self.criterion = NCELoss(0.07)
         self.overlap_criterion = nn.BCELoss()
+        self.config = config
 
 
     def forward(self, batch):
@@ -161,10 +230,15 @@ class BEVTrainer(nn.Module):  # TODO rename
         # batch_n_points是batch中每个元素对应的voxel数量，pc_min是中间变量原坐标除以voxel_size之后 最小值.
         # 是list类型的包括: points, pc_overlap_mask, img_overlap_mask, indexes, inv_indexes, batch_n_points, coordinates.
         # R: [2,3,3] T: [2, 3], voxels: [N, 4],
-        batch_size = len(batch['batch_n_points'])
+        batch_size = len(batch['points'])
         device = batch['voxels'].device
         input_fmap = self.encoder(batch['voxels'], batch['coordinates']) # (n,c)
-        voxel_feature = input_fmap # (1, c, n)
+        if self.config.ENCODER.COLLATE != "collate_spconv":
+            voxel_feature = input_fmap # (1, c, n)
+        else:
+            # stride = 8, ad hoc
+            voxel_feature = interpolate_from_bev_features(batch["voxels"], batch['coordinates'], input_fmap, batch_size, 8)
+
         voxel_feature_norm=F.normalize(voxel_feature, dim=1,p=2)
         voxel_feature_norm = voxel_feature_norm # (N, 64)
 
@@ -187,12 +261,19 @@ class BEVTrainer(nn.Module):  # TODO rename
         c_sample_voxel_pairing_images_list = []
         sample_voxel_mask_list = []
         for batch_idx in range(batch_size):
-            batch_indices = batch['coordinates'][:, 3] == batch_idx
+            if self.config.ENCODER.COLLATE == "collate_torchsparse":
+                coordinates_column_idx = 3
+            else:
+                coordinates_column_idx = 0 # spconv, minkowski
+            batch_indices = batch['coordinates'][:, coordinates_column_idx] == batch_idx
             b_voxel_num = (batch_indices).sum()
             b_voxel_feature = voxel_feature[batch_indices]
             b_voxel_feature_norm = voxel_feature_norm[batch_indices]
             
-            b_voxel_abs_coords = torch.tensor(batch['points'][batch_idx], device=img_feature.device)[batch['indexes'][batch_idx]]
+            if 'indexes' in batch and len(batch['indexes'])!=0:
+                b_voxel_abs_coords = torch.tensor(batch['points'][batch_idx], device=img_feature.device)[batch['indexes'][batch_idx]]
+            else:
+                b_voxel_abs_coords = batch['voxels'][batch['coordinates'][:, coordinates_column_idx]==batch_idx]
             for cam_idx in range(cam_num):
                 # 每个图像随机采样 sample_voxel_num 个点
                 c_sample_indices = torch.randint(0, b_voxel_num, (sample_voxel_num,))
@@ -201,6 +282,7 @@ class BEVTrainer(nn.Module):  # TODO rename
                 c_sample_voxel_feature = b_voxel_feature[c_sample_indices]
                 c_sample_voxel_feature_norm = b_voxel_feature_norm[c_sample_indices]
                 c_sample_voxel_abs_coords = b_voxel_abs_coords[c_sample_indices, :3]
+
                 # c_sample_voxel_abs_coords = torch.tensor(c_sample_voxel_abs_coords, device=img_feature.device)
                 
                 # cam = K @ (R @ pc[:, :3].T + T.reshape(3, 1))
@@ -259,7 +341,10 @@ class BEVTrainer(nn.Module):  # TODO rename
             fuse_contras_img_feature_norm.append(fused_img_feature_norm_sample_valid)
         fuse_contras_pc_feature_norm = torch.cat(fuse_contras_pc_feature_norm, 0)
         fuse_contras_img_feature_norm = torch.cat(fuse_contras_img_feature_norm, 0)
-        choice_idx = np.random.choice(fuse_contras_pc_feature_norm.shape[0], self.kpt_pc_num * batch_size, replace=False)
+        if fuse_contras_pc_feature_norm.shape[0] > self.kpt_pc_num * batch_size:
+            choice_idx = np.random.choice(fuse_contras_pc_feature_norm.shape[0], self.kpt_pc_num * batch_size, replace=False)
+        else:
+            choice_idx = np.random.choice(fuse_contras_pc_feature_norm.shape[0], self.kpt_pc_num * batch_size, replace=True)
         loss_contras_fuse = self.criterion(fuse_contras_pc_feature_norm[choice_idx], fuse_contras_img_feature_norm[choice_idx])
 
 
@@ -297,7 +382,6 @@ class BEVTrainer(nn.Module):  # TODO rename
                 indices = torch.cat((valid_indices, pad_indices), dim=0)
             else:
                 keypoints_mask_current = pc_score[idx] > 0.7
-                # keypoints_mask_current = sample_voxel_mask[idx] > 0.8 # ad hoc for debug
                 keypoints_current_valid_num = (keypoints_mask_current).sum()
                 # print('# second keypoints_current_valid_num', keypoints_current_valid_num)
                 valid_indices = torch.nonzero(keypoints_mask_current, as_tuple=False).squeeze()
@@ -360,6 +444,7 @@ class BEVTrainer(nn.Module):  # TODO rename
         # print(predicted_2d_coords[0][:7])
         # print(keypoints_2d_coordinates[0][:7])
 
+        # predicted_2d_coords = keypoints_2d_coordinates # for debug
         y_homo = torch.cat([predicted_2d_coords, torch.ones(batch_size * cam_num, num_keypoints, 1, device=predicted_2d_coords.device)],dim=-1)
         K_data = batch['K_data'].view(batch_size * cam_num, 3, 3)
         K_inv = torch.inverse(K_data).permute(0, 2, 1)
@@ -371,7 +456,6 @@ class BEVTrainer(nn.Module):  # TODO rename
         # y_uncalibrated = torch.bmm(y_homo, K_inv)
         # y_uncalibrated = y_uncalibrated[:, :, :2]
         # x_cam, R, t, err_2d, err_3d = efficient_pnp(keypoints_coordinates, y_uncalibrated)
-
 
         def smooth_l1_loss(input, target, beta=1.0):
             diff = input - target

@@ -2,6 +2,8 @@ DATASET:
     TRAIN: 'NuscenesDataset'
     VAL: null
     DATASET_ROOT: 'data/nuscenes'
+    IMG_H: 224
+    IMG_W: 416
     POINT_CLOUD_RANGE: [-51.2, -51.2, -3.0, 51.2, 51.2, 1.0]
     POINT_CLOUD_RANGE_VAL: null
     DATA_SPLIT: {
@@ -20,7 +22,7 @@ ENCODER:
     COLLATE: collate_spconv
     IN_CHANNELS: 4
     OUT_CHANNELS: 256  # DO NOT CHANGE
-    FEATURE_DIMENSION: 128
+    FEATURE_DIMENSION: 64
 
 OPTIMIZATION:
     BATCH_SIZE_PER_GPU: 10

@@ -60,7 +60,8 @@ def collate_torchsparse(voxel_size, use_coords, list_data):
     batch['R_data'] = torch.stack([torch.from_numpy(R) for R in batch['R_data']], axis=0).float()
     batch['T_data'] = torch.stack([torch.from_numpy(T) for T in batch['T_data']], axis=0).float()
     if 'K_data' in batch:
-        batch['K_data'] = torch.stack([torch.from_numpy(K) for K in batch['K_data']], axis=0)
+        batch['K_data'] = torch.stack([torch.from_numpy(K) for K in batch['K_data']], axis=0).float()
+
     return batch
 
 
@@ -115,10 +116,10 @@ def collate_minkowski(voxel_size, use_coords, list_data):
 
     batch['pairing_points'] = torch.tensor(np.concatenate(batch['pairing_points']))
     batch['pairing_images'] = torch.tensor(np.concatenate(batch['pairing_images']))
-    batch['R_data'] = torch.stack([torch.from_numpy(R) for R in batch['R_data']], axis=0)
-    batch['T_data'] = torch.stack([torch.from_numpy(T) for T in batch['T_data']], axis=0)
+    batch['R_data'] = torch.stack([torch.from_numpy(R) for R in batch['R_data']], axis=0).float()
+    batch['T_data'] = torch.stack([torch.from_numpy(T) for T in batch['T_data']], axis=0).float()
     if 'K_data' in batch:
-        batch['K_data'] = torch.stack([torch.from_numpy(K) for K in batch['K_data']], axis=0)
+        batch['K_data'] = torch.stack([torch.from_numpy(K) for K in batch['K_data']], axis=0).float()
 
     return batch
 
@@ -129,7 +130,7 @@ class CollateSpconv:
         self._voxel_generator = VoxelGenerator(
             vsize_xyz=config.DATASET.VOXEL_SIZE,
             coors_range_xyz=config.DATASET.POINT_CLOUD_RANGE,
-            num_point_features=4,
+            num_point_features=5, # ad hoc, one dim for indices of group_pc
             max_num_points_per_voxel=10,
             max_num_voxels=60000
         )
@@ -148,23 +149,50 @@ class CollateSpconv:
     def mask_points_by_range(points, limit_range):
         mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
             & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4])
-        return points[mask]
+        return points[mask], mask
 
     def collate_spconv(self, voxel_size, use_coords, list_data):
         batch = {}
         for key in list_data[0]:
             batch[key] = [l[key] for l in list_data]
 
-        batch["voxels_in"], batch["voxels_out"] = [], []
-        batch['indexes_in'], batch['indexes_out'] = [], []
-        batch['inv_indexes_in'], batch['inv_indexes_out'] = [], []
-        batch['batch_n_points_in'], batch['batch_n_points_out'] = [], []
-        batch['pc_min_in'], batch['pc_min_out'] = [], []
+        batch["voxels"] = []
+        batch['indexes'] = []
+        batch['inv_indexes'] = []
+        batch['batch_n_points'] = []
+        batch['pc_min'] = []
         coords = []
         batch_id = 0
-        for group_pc in batch["points_in"]:
-            group_pc = self.mask_points_by_range(group_pc, self.coors_range)
+        offset = 0
+        for group_pc in batch["points"]:
+            group_pc_ori_len = len(group_pc)
+            pairing_points = batch["pairing_points"][batch_id]
+            pairing_images = batch['pairing_images'][batch_id]
+            # raise ImportError("Please checkout the branch for spconv.")
+            group_pc, mask = self.mask_points_by_range(group_pc, self.coors_range)
+            # original_to_new_index = np.cumsum(mask) - 1
+            # new_indexes = original_to_new_index[indexes]
+            original_to_new_index = -np.ones(group_pc_ori_len, dtype=int)
+            original_to_new_index[mask] = np.arange(len(group_pc))
+            
+            pairing_points = original_to_new_index[pairing_points]
+            
+            pairing_images = pairing_images[pairing_points >= 0]
+            pairing_points = pairing_points[pairing_points >= 0]
+
+            # group_pc_masked_len = len(group_pc)
+            group_pc=np.concatenate([group_pc, np.arange(len(group_pc)).reshape(-1, 1)], 1)
             voxels, coordinates, num_points = self.generate(group_pc)
+
+            selection_indices = voxels[:, 0, 4].astype(np.int)
+            voxels = voxels[:, :, :4]
+            original_to_new_index = -np.ones(group_pc.shape[0], dtype=int)
+            original_to_new_index[selection_indices] = np.arange(len(voxels))
+            mapped_indexes = original_to_new_index[pairing_points]
+            valid_mask = mapped_indexes >= 0
+            pairing_points = mapped_indexes[valid_mask]
+            pairing_images = pairing_images[valid_mask]
+
             coordinates = torch.from_numpy(coordinates)
             points_mean = torch.from_numpy(voxels).sum(dim=1, keepdim=False)
             normalizer = torch.clamp_min(torch.from_numpy(num_points).view(-1, 1), min=1.0).type_as(points_mean)
@@ -172,44 +200,39 @@ class CollateSpconv:
             voxels = points_mean.contiguous()
 
             coords.append(F.pad(coordinates, (1, 0, 0, 0), value=batch_id))
+
+            # todo
+            # pairing_points = inv_indexes[pairing_points]
+            pairing_points += offset
+            batch['pairing_points'][batch_id] = pairing_points
+            batch['pairing_images'][batch_id] = pairing_images
+            batch['pairing_images'][batch_id][:, 0] += batch_id * batch['images'][0].shape[0]
+
             pc_min = np.array([self.coors_range[0:3]]).repeat(coordinates.shape[0], 0)
-            batch['pc_min_in'].append(torch.from_numpy(pc_min))
+            batch['pc_min'].append(torch.from_numpy(pc_min))
+            # batch["indexes"].append(indexes)
+            # batch['inv_indexes'].append(inv_indexes)
             if use_coords:
-                batch["voxels_in"].append(voxels)
+                batch["voxels"].append(voxels)
             else:
-                batch["voxels_in"].append(voxels[:, 3:])
+                batch["voxels"].append(voxels[:, 3:])
             batch_id += 1
-        batch['coordinates_in'] = torch.cat(coords, 0).int()
-        batch['pc_min_in'] = torch.cat(batch['pc_min_in'])
-        batch['voxels_in'] = torch.cat(batch['voxels_in'])
+            offset += coordinates.shape[0]
+        batch['coordinates'] = torch.cat(coords, 0).int()
+        # batch['pc_min'] = torch.cat(batch['pc_min'])
+        batch['voxels'] = torch.cat(batch['voxels'])
 
-        coords = []
-        batch_id = 0
-        for group_pc in batch["points_out"]:
-            group_pc = self.mask_points_by_range(group_pc, self.coors_range)
-            voxels, coordinates, num_points = self.generate(group_pc)
-            coordinates = torch.from_numpy(coordinates)
-            points_mean = torch.from_numpy(voxels).sum(dim=1, keepdim=False)
-            normalizer = torch.clamp_min(torch.from_numpy(num_points).view(-1, 1), min=1.0).type_as(points_mean)
-            points_mean = points_mean / normalizer
-            voxels = points_mean.contiguous()
+        batch['images'] = torch.cat([torch.from_numpy(img) for img in batch['images']], 0).float()
+        batch['img_overlap_masks'] = torch.cat([torch.from_numpy(img) for img in batch['img_overlap_masks']], 0).float()
+        batch['pairing_points'] = torch.tensor(np.concatenate(batch['pairing_points']))
+        batch['pairing_images'] = torch.tensor(np.concatenate(batch['pairing_images']))
 
-            coords.append(F.pad(coordinates, (1, 0, 0, 0), value=batch_id))
-            pc_min = np.array([self.coors_range[0:3]]).repeat(coordinates.shape[0], 0)
-            batch['pc_min_out'].append(torch.from_numpy(pc_min))
-            if use_coords:
-                batch["voxels_out"].append(voxels)
-            else:
-                batch["voxels_out"].append(voxels[:, 3:])
-            batch_id += 1
-        batch['coordinates_out'] = torch.cat(coords, 0).int()
-        batch['pc_min_out'] = torch.cat(batch['pc_min_out'])
-        batch['voxels_out'] = torch.cat(batch['voxels_out'])
-
-        batch['R_in'] = torch.stack([torch.from_numpy(np.stack(R)) for R in batch['R_in']], axis=0)
-        batch['R_out'] = torch.stack([torch.from_numpy(np.stack(R)) for R in batch['R_out']], axis=0)
-        batch['T_in'] = torch.stack([torch.from_numpy(np.stack(T)) for T in batch['T_in']], axis=0)
-        batch['T_out'] = torch.stack([torch.from_numpy(np.stack(T)) for T in batch['T_out']], axis=0)
+        # batch['R_data'] = torch.stack([torch.from_numpy(np.stack(R)) for R in batch['R_data']], axis=0)
+        # batch['T_data'] = torch.stack([torch.from_numpy(np.stack(T)) for T in batch['T_data']], axis=0)
+        batch['R_data'] = torch.stack([torch.from_numpy(R) for R in batch['R_data']], axis=0).float()
+        batch['T_data'] = torch.stack([torch.from_numpy(T) for T in batch['T_data']], axis=0).float()
+        if 'K_data' in batch:
+            batch['K_data'] = torch.stack([torch.from_numpy(K) for K in batch['K_data']], axis=0).float()
 
         if 'flow' in batch:
             batch['flow'] = torch.from_numpy(np.stack(batch['flow']))

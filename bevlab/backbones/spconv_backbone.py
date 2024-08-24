@@ -409,8 +409,8 @@ class BEVNet(nn.Module):
         )
         sp_tensor = self.backbone_3d(sp_tensor)
         encoding = self.height_compression(sp_tensor)
-        occupancy = encoding.any(1)
+        # occupancy = encoding.any(1)
 
         sp_tensor = self.backbone_2d(encoding)
         sp_tensor = self.final(sp_tensor)
-        return sp_tensor, occupancy
+        return sp_tensor

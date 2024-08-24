@@ -3,8 +3,8 @@ DATASET:
     VAL: null
     DATASET_ROOT: 'data/nuscenes'
 
-    IMG_H: 160
-    IMG_W: 320
+    IMG_H: 224
+    IMG_W: 416
 
     POINT_CLOUD_RANGE: [-51.2, -51.2, -3.0, 51.2, 51.2, 1.0]
     POINT_CLOUD_RANGE_VAL: [0, -40, -3, 70.4, 40, 1]

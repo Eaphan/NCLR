@@ -417,6 +417,7 @@ class SemanticKITTIDataset(Dataset):
         img_list = []
         R_list = []
         T_list = []
+        K_list = []
         matching_points_list = []
         matching_pixels_list = []
         pc_overlap_mask_list = []
@@ -437,7 +438,7 @@ class SemanticKITTIDataset(Dataset):
             img = img.astype(np.float32)
             img /= 255.0
 
-            downsample_scale = 1
+            downsample_scale = 0.25
             scale_h = int(downsample_scale * self.img_h)
             scale_w = int(downsample_scale * self.img_w)
             img_h_ratio = scale_h / img_h_ori
@@ -464,21 +465,15 @@ class SemanticKITTIDataset(Dataset):
                 np.fliplr(img)
                 K[0, 2] = scale_w - K[0, 2]
 
-            P = np.identity(4)
-            P[:3, :3] = K
-            fx = K[0, 0]
-            fy = K[1, 1]
-            cx = K[0, 2]
-            cy = K[1, 2]
-            P[0, 3] = fx*tx + cx*tz
-            P[1, 3] = fy*ty + cy*tz
-            P[2, 3] = tz
-
             Tr = self.calib_tr_list[seq_q]        
-            Tr = np.dot(P, Tr)
             R = Tr[:3, :3]
             T = P[:3, 3]
             #### resize image and change K end ####
+
+            tz = T[2]
+            tx = (P[0, 3] - cx * tz) / fx
+            ty = (P[1, 3] - cy * tz) / fy
+            T = np.array([tx, ty, tz])
 
             T -= R @ trans_dict['T']
             R = R @ trans_dict['R'].T
@@ -486,7 +481,7 @@ class SemanticKITTIDataset(Dataset):
             #     pc, trans_dict = revtrans_scaling(pc, trans_dict)
             #     R = R * trans_dict['S']            
 
-            cam = R @ pc[:, :3].T + T.reshape(3, 1)
+            cam = K @ (R @ pc[:, :3].T + T.reshape(3, 1))
             scan_C2 = cam.T
             scan_C2_depth = scan_C2[:, 2]
             scan_C2 = (scan_C2[:, :2].T / scan_C2[:, 2]).T
@@ -515,6 +510,7 @@ class SemanticKITTIDataset(Dataset):
             img_list.append(img)
             R_list.append(R)
             T_list.append(T)
+            K_list.append(K)
             matching_points_list.append(matching_points)
             matching_pixels_list.append(matching_pixels)
             pc_overlap_mask_list.append(pc_overlap_mask)
@@ -523,7 +519,7 @@ class SemanticKITTIDataset(Dataset):
             if 0:
                 import matplotlib.pyplot as plt
                 # validate the correspondence between image and pc
-                cam = R @ pc[:, :3].T + T.reshape(3, 1)
+                K @ (R @ pc[:, :3].T + T.reshape(3, 1))
                 scan_C2 = cam.T
                 scan_C2_depth = scan_C2[:, 2]
                 scan_C2 = (scan_C2[:, :2].T / scan_C2[:, 2]).T
@@ -550,7 +546,7 @@ class SemanticKITTIDataset(Dataset):
         img = img.transpose((0, 3, 1, 2))
         R_data = np.array(R_list)
         T_data = np.array(T_list)
-        # K_data = np.array(K_list)
+        K_data = np.array(K_list)
         img_overlap_masks = np.array(img_overlap_mask_list)
         pairing_points = np.concatenate(matching_points_list)
         pairing_images = np.concatenate(matching_pixels_list)
@@ -559,7 +555,7 @@ class SemanticKITTIDataset(Dataset):
         return_dict["points"] = pc
         return_dict["R_data"] = R_data
         return_dict["T_data"] = T_data
-        # return_dict["K_data"] = K_data
+        return_dict["K_data"] = K_data
         return_dict["img_overlap_masks"] = img_overlap_masks # (n, h, w)
         return_dict["pairing_points"] = pairing_points
         return_dict["pairing_images"] = pairing_images
