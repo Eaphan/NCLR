@@ -87,7 +87,7 @@ python train_downstream_semseg.py cfg=nuscenes_torchsparse cfg.downstream.max_ep
 ```
 
 
-#### Results on SemanticKITTI' validation set using a Minkowski SR-Unet 18:
+<!-- #### Results on SemanticKITTI' validation set using a Minkowski SR-Unet 18:
 Method                                                               | 0.1%   | 1%     | 10%    | 50%    | 100%
 ---                                                                  |:-:     |:-:     |:-:     |:-:     |:-:
 Random init.                                                         | 30.0   | 46.2   | 57.6   | 61.8   | 62.7
@@ -97,7 +97,7 @@ Random init.                                                         | 30.0   | 
 [STSSL](https://arxiv.org/abs/2303.16235)                            | 32.0   | 49.4   | 60.0   | 62.9   | 63.3
 [ALSO](https://arxiv.org/abs/2104.04687)                             | 35.0   | 50.0   | 60.5   | 63.4 | 63.6
 [TARL](http://www.ipb.uni-bonn.de/pdfs/nunes2023cvpr.pdf)            | 37.9   | 52.5   | 61.2   | 63.4 | 63.7
-[NCLR](https://arxiv.org/abs/2401.12452)                  |**39.2**|**53.4**|**61.4**|**63.5**|**63.9**
+[NCLR](https://arxiv.org/abs/2401.12452)                  |**39.2**|**53.4**|**61.4**|**63.5**|**63.9** -->
 
 To launch a downstream experiment, with a Minkowski SR-Unet, you can use these commands in addition with `cfg.downstream.checkpoint_dir=[checkpoint directory] cfg.downstream.checkpoint_name=[checkpoint name]`
 
@@ -128,6 +128,9 @@ python train_downstream_semseg.py cfg=semantickitti_minkowski cfg.downstream.max
 
 Please use the code of [OpenPCDet](https://github.com/open-mmlab/OpenPCDet) with default parameters for SECOND or PVRCNN and with no multiprocessing to retain compatibility with previous work and this one.
 
+### Panoptic segmentation baseline
+Panoptic segmentation baseline [MinkowskiPanoptic](https://github.com/PRBonn/MinkowskiPanoptic) implemented based on the MinkowskiEngine library
+
 ## Acknowledgment
 
 Part of the codebase has been adapted from [OpenPCDet](https://github.com/open-mmlab/OpenPCDet), [ALSO](https://github.com/valeoai/ALSO), [valeoai](https://github.com/valeoai/BEVContrast), and [SLidR](https://github.com/valeoai/SLidR).
@@ -142,6 +145,13 @@ Part of the codebase has been adapted from [OpenPCDet](https://github.com/open-m
 - [x] Add training details.
 - [ ] LTA
 - [ ] Add pre-trained weights.
+
+## Recommended Works
+Here are some of the methods I recommend for 3D representation learning:
+- SLidR: [Paper](https://arxiv.org/abs/2203.16258), [Code](https://github.com/valeoai/SLidR)
+- OLIVINE: [Paper](arxiv.org/abs/2405.14271), [Code](https://github.com/Eaphan/OLIVINE)
+- BEVContrast: [Paper](https://arxiv.org/abs/2310.17281), [Code](https://github.com/valeoai/BEVContrast)
+- MinkowskiPanoptic: [Code](https://github.com/PRBonn/MinkowskiPanoptic)
 
 ## License
 NCLR is released under the [Apache 2.0 license](./LICENSE).
