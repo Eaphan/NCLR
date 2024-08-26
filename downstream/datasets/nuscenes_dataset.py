@@ -224,8 +224,8 @@ class NuScenes(Dataset):
                     # Add new scans in the list
                     self.list_keyframes.extend(list_data)
 
-        if split == 'verifying':
-            self.list_keyframes = self.list_keyframes[::10]
+        # if split == 'verifying':
+        #     self.list_keyframes = self.list_keyframes[::10]
 
         logging.info(f"Nuscenes dataset split {split} - {len(self.list_keyframes)} frames")
 

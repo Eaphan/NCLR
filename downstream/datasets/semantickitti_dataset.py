@@ -108,9 +108,9 @@ class SemanticKITTI(Dataset):
             [0, 0, 255],
         ], dtype=np.uint8)
 
-        if split == 'val':
-            self.points_datapath = self.points_datapath[::10]
-            self.labels_datapath = self.labels_datapath[::10]
+        # if split == 'val':
+        #     self.points_datapath = self.points_datapath[::10]
+        #     self.labels_datapath = self.labels_datapath[::10]
 
         logging.info(f"SemanticKITTI dataset {len(self.points_datapath)}")
 

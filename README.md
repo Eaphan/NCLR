@@ -3,7 +3,7 @@
 Official Pytorch implementation of the method **NCLR**. More details can be found in the paper:
 
 **Self-supervised Learning of LiDAR 3D PointClouds via 2D-3D Neural Calibration**, Arxiv 2024 [[arXiv](https://arxiv.org/abs/2401.12452)]
-by *Yifan Zhang, Siyu Ren, Junhui Hou, Jinjian Wu, Guangming Shi*
+by *Yifan Zhang, Siyu Ren, Junhui Hou, Jinjian Wu, Yixuan Yuan, Guangming Shi*
 
 ![Overview of the method](./assets/method.png)
 
@@ -11,7 +11,7 @@ If you use NCLR in your research, please cite:
 ```
 @article{zhang2024nclr,
   title={Self-supervised Learning of LiDAR 3D Point Clouds via 2D-3D Neural Calibration},
-  author={Zhang, Yifan and Ren, Siyu and Hou, Junhui and Wu, Jinjian and Shi, Guangming},
+  author={Zhang, Yifan and Ren, Siyu and Hou, Junhui and Wu, Jinjian and Yuan, Yixuan and Shi, Guangming},
   journal={arXiv preprint arXiv:2401.12452},
   year={2024}
 }
@@ -44,13 +44,13 @@ The code provided can be used with [nuScenes](https://www.nuscenes.org/lidar-seg
 
 Config file for SemanticKITTI is included for [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine) by default to keep retro-compatibility with previous work, while for nuScenes it uses [Torchsparse](https://github.com/mit-han-lab/torchsparse) which is generally faster. Switching between libraries in the config files is easy. While architectures are similar, weights from one library cannot easily be transferred to the other.
 
-- On SemanticKITTI:
-
-```python train.py --config_file cfgs/pretrain_sk_minkunet.yaml --name minkunet_nclr_sk```
-
 - On nuScenes:
 
 ```python train.py --config_file cfgs/pretrain_ns_minkunet.yaml --name minkunet_nclr_ns```
+
+- On SemanticKITTI:
+
+```python train.py --config_file cfgs/pretrain_sk_minkunet.yaml --name minkunet_nclr_sk```
 
 ### Semantic segmentation's downstream
 
@@ -105,19 +105,19 @@ To launch a downstream experiment, with a Minkowski SR-Unet, you can use these c
 cd downstream
 
 # 100%
-python train_downstream_semseg.py cfg=semantickitti_minkowski cfg.downstream.max_epochs=30 cfg.downstream.val_interval=5 cfg.downstream.skip_ratio=1
+python train_downstream_semseg.py cfg=nuscenes_minkowski cfg.downstream.max_epochs=30 cfg.downstream.val_interval=5 cfg.downstream.skip_ratio=1
 
 # 50%
-python train_downstream_semseg.py cfg=semantickitti_minkowski cfg.downstream.max_epochs=50 cfg.downstream.val_interval=5 cfg.downstream.skip_ratio=2
+python train_downstream_semseg.py cfg=nuscenes_minkowski cfg.downstream.max_epochs=50 cfg.downstream.val_interval=5 cfg.downstream.skip_ratio=2
 
 # 10%
-python train_downstream_semseg.py cfg=semantickitti_minkowski cfg.downstream.max_epochs=100 cfg.downstream.val_interval=10 cfg.downstream.skip_ratio=10
+python train_downstream_semseg.py cfg=nuscenes_minkowski cfg.downstream.max_epochs=100 cfg.downstream.val_interval=10 cfg.downstream.skip_ratio=10
 
 # 1%
-python train_downstream_semseg.py cfg=semantickitti_minkowski cfg.downstream.max_epochs=500 cfg.downstream.val_interval=50 cfg.downstream.skip_ratio=100
+python train_downstream_semseg.py cfg=nuscenes_minkowski cfg.downstream.max_epochs=500 cfg.downstream.val_interval=50 cfg.downstream.skip_ratio=100
 
 # 0.1%
-python train_downstream_semseg.py cfg=semantickitti_minkowski cfg.downstream.max_epochs=1000 cfg.downstream.val_interval=100 cfg.downstream.skip_ratio=1000
+python train_downstream_semseg.py cfg=nuscenes_minkowski cfg.downstream.max_epochs=1000 cfg.downstream.val_interval=100 cfg.downstream.skip_ratio=1000
 ```
 
 ### Object detection's pre-training
@@ -155,4 +155,3 @@ Here are some of the methods I recommend for 3D representation learning:
 
 ## License
 NCLR is released under the [Apache 2.0 license](./LICENSE).
-

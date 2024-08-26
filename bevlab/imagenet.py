@@ -89,7 +89,7 @@ class Preprocessing:
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, image_weights="imagenet", preprocessing='default'):
+    def __init__(self, image_weights="dino", preprocessing='default'):
         super(ImageEncoder, self).__init__()
         Encoder = resnet_encoders["resnet50"]["encoder"]
         params = resnet_encoders["resnet50"]["params"]
