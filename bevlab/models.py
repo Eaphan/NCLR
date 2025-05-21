@@ -322,7 +322,7 @@ class BEVTrainer(nn.Module):  # TODO rename
         fused_pc_feature = sample_voxel_feature + self.i2p_fuse_layer(sample_voxel_feature, img_feature_mid, img_feature_mid)
 
         # (bs*cam_num, c, img_h, img_w)
-        fused_img_feature = img_feature_mid + self.i2p_fuse_layer(img_feature_mid, sample_voxel_feature, sample_voxel_feature)
+        fused_img_feature = img_feature_mid + self.p2i_fuse_layer(img_feature_mid, sample_voxel_feature, sample_voxel_feature)
         fused_pc_feature_norm = F.normalize(fused_pc_feature, dim=1,p=2)
         fused_img_feature_norm = F.normalize(fused_img_feature, dim=1,p=2)
 
