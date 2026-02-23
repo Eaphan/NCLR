@@ -2,18 +2,21 @@
 
 Official Pytorch implementation of the method **NCLR**. More details can be found in the paper:
 
-**Self-supervised Learning of LiDAR 3D PointClouds via 2D-3D Neural Calibration**, Arxiv 2024 [[arXiv](https://arxiv.org/abs/2401.12452)]
-by *Yifan Zhang, Siyu Ren, Junhui Hou, Jinjian Wu, Yixuan Yuan, Guangming Shi*
+**Self-supervised Learning of LiDAR 3D PointClouds via 2D-3D Neural Calibration**, TPAMI 2025 [[arXiv](https://arxiv.org/abs/2401.12452)]
+by *Yifan Zhang, Junhui Hou, Siyu Ren, Jinjian Wu, Yixuan Yuan, Guangming Shi*
 
 ![Overview of the method](./assets/method.png)
 
 If you use NCLR in your research, please cite:
 ```
-@article{zhang2024nclr,
+@article{zhang2025nclr,
   title={Self-supervised Learning of LiDAR 3D Point Clouds via 2D-3D Neural Calibration},
-  author={Zhang, Yifan and Ren, Siyu and Hou, Junhui and Wu, Jinjian and Yuan, Yixuan and Shi, Guangming},
-  journal={arXiv preprint arXiv:2401.12452},
-  year={2024}
+  author={Zhang, Yifan and Ren, Siyu and Hou, Junhui and Wu, Jinjian and Shi, Guangming},
+  journal={IEEE Transactions on Pattern Analysis and Machine Intelligence}, 
+  volume={47},
+  number={10},
+  pages={9201--9216},
+  year={2025}
 }
 ```
 
