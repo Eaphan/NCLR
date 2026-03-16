@@ -205,7 +205,7 @@ class NuscenesDataset(Dataset):
             # step1: image augmentation
             flip_image_mask=False
             if np.random.random() < self.flip_image_prob:
-                np.fliplr(img)
+                img = np.fliplr(img)
                 K[0, 2] = scale_w - K[0, 2]
 
             # step2: corresponding to pc augmentation
@@ -462,7 +462,7 @@ class SemanticKITTIDataset(Dataset):
             # step1: image augmentation
             flip_image_mask=False
             if np.random.random() < self.flip_image_prob:
-                np.fliplr(img)
+                img = np.fliplr(img)
                 K[0, 2] = scale_w - K[0, 2]
 
             Tr = self.calib_tr_list[seq_q]        
